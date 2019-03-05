@@ -2,16 +2,12 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"strconv"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -19,7 +15,7 @@ var (
 )
 
 /*
- * new struct
+ * new struct podNode the pod schedule the nodeName
  */
 type PodParameters struct {
 	spaceName  string
@@ -28,6 +24,7 @@ type PodParameters struct {
 	podCommand []string
 	cpuLimit   string
 	memLimit   string
+	podNode    string
 }
 
 /*
@@ -197,6 +194,7 @@ func createHadoopPods(clientset *kubernetes.Clientset, podPara *PodParameters) (
 	newPod.ObjectMeta = podObjectMeta
 
 	podSpec := apiv1.PodSpec{
+		NodeName: podPara.podNode,
 		Containers: []apiv1.Container{
 			apiv1.Container{
 				Name:    podPara.podName,
@@ -300,88 +298,92 @@ func createHadoopPods(clientset *kubernetes.Clientset, podPara *PodParameters) (
 	return clientset.CoreV1().Pods(podPara.spaceName).Create(newPod)
 }
 
-func main() {
-	fmt.Println("come main")
-	flag.Parse()
-	// uses the current context in kubeconfig"k8s.io/apimachinery/pkg/api/resource"
-	config, err := clientcmd.BuildConfigFromFlags("https://master.example.com:8443", *kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
-	// creates the clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
+// func main() {
+// 	fmt.Println("come main")
+// 	flag.Parse()
+// 	// uses the current context in kubeconfig"k8s.io/apimachinery/pkg/api/resource"
+// 	config, err := clientcmd.BuildConfigFromFlags("https://master.example.com:8443", *kubeconfig)
+// 	if err != nil {
+// 		panic(err.Error())
+// 	}
+// 	// creates the clientset
+// 	clientset, err := kubernetes.NewForConfig(config)
+// 	if err != nil {
+// 		panic(err.Error())
+// 	}
 
-	//create namesapce
-	//newNamespace, err := createNamespace(clientset,"k8s-test")
+// 	//create namesapce
+// 	//newNamespace, err := createNamespace(clientset,"k8s-test")
 
-	//get namespace
-	spaceName := "hadoop-test"
-	hadoopNc, err := getNamespace(clientset, spaceName)
-	if err != nil {
-		panic(err.Error())
-	}
-	fmt.Println(hadoopNc.Name)
+// 	//get namespace
+// 	spaceName := "hadoop-test"
+// 	hadoopNc, err := getNamespace(clientset, spaceName)
+// 	if err != nil {
+// 		panic(err.Error())
+// 	}
+// 	fmt.Println(hadoopNc.Name)
 
-	//create servie in namespace hadoopNc
-	svcName := "hadoop-master"
-	newSvc, err := createHadoopMasterService(clientset, spaceName, svcName)
-	if err != nil {
-		panic(err.Error())
-	} else {
-		fmt.Print(newSvc.Name)
-		fmt.Println("New master service create successful")
-	}
+// 	//create servie in namespace hadoopNc
+// 	svcName := "hadoop-master"
+// 	newSvc, err := createHadoopMasterService(clientset, spaceName, svcName)
+// 	if err != nil {
+// 		panic(err.Error())
+// 	} else {
+// 		fmt.Print(newSvc.Name)
+// 		fmt.Println("New master service create successful")
+// 	}
 
-	//create master pod
-	masterName := "hadoop-master"
-	masterImage := "172.30.7.23:5000/openshift/hadoop-master:0.1.0"
-	masterCommand := []string{"bash", "-c", "/root/start-ssh-serf.sh && sleep 365d"}
-	podCPU := "500m"
-	podMem := "2Gi"
-	newPodPara := &PodParameters{
-		spaceName:  spaceName,
-		podName:    masterName,
-		podImage:   masterImage,
-		podCommand: masterCommand,
-		cpuLimit:   podCPU,
-		memLimit:   podMem,
-	}
-	newMasterPod, err := createHadoopPods(clientset, newPodPara)
-	if err != nil {
-		panic(err.Error())
-	} else {
-		fmt.Print("New master pod create successful")
-		fmt.Println(newMasterPod.Name)
-	}
+// 	//create master pod
+// 	masterName := "hadoop-master"
+// 	masterImage := "172.30.7.23:5000/openshift/hadoop-master:0.1.0"
+// 	masterCommand := []string{"bash", "-c", "/root/start-ssh-serf.sh && sleep 365d"}
+// 	podCPU := "500m"
+// 	podMem := "2Gi"
+// 	masterNode := "master.example.com"
+// 	newPodPara := &PodParameters{
+// 		spaceName:  spaceName,
+// 		podName:    masterName,
+// 		podImage:   masterImage,
+// 		podCommand: masterCommand,
+// 		cpuLimit:   podCPU,
+// 		memLimit:   podMem,
+// 		podNode:    masterNode,
+// 	}
+// 	newMasterPod, err := createHadoopPods(clientset, newPodPara)
+// 	if err != nil {
+// 		panic(err.Error())
+// 	} else {
+// 		fmt.Print("New master pod create successful")
+// 		fmt.Println(newMasterPod.Name)
+// 	}
 
-	//create N slave pods
-	N := 2
-	var i int
-	podName := "hadoop-slave-"
-	slaveImage := "172.30.7.23:5000/openshift/hadoop-slave:0.1.0"
-	slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}
-	//create interval
-	time.Sleep(time.Duration(5) * time.Second)
-	for i = 1; i <= N; i++ {
-		slaveName := podName + strconv.Itoa(i)
-		newPodPara := &PodParameters{
-			spaceName:  spaceName,
-			podName:    slaveName,
-			podImage:   slaveImage,
-			podCommand: slaveCommand,
-			cpuLimit:   podCPU,
-			memLimit:   podMem,
-		}
-		newSlavePod, err := createHadoopPods(clientset, newPodPara)
-		if err != nil {
-			panic(err.Error())
-		} else {
-			fmt.Print("New master pod create successful")
-			fmt.Println(newSlavePod.Name)
-		}
-		time.Sleep(time.Duration(5) * time.Second)
-	}
-}
+// 	//create N slave pods
+// 	N := 2
+// 	var i int
+// 	podName := "hadoop-slave-"
+// 	slaveImage := "172.30.7.23:5000/openshift/hadoop-slave:0.1.0"
+// 	slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}
+// 	//create interval
+// 	time.Sleep(time.Duration(5) * time.Second)
+// 	for i = 1; i <= N; i++ {
+// 		slaveName := podName + strconv.Itoa(i)
+// 		slaveNode := "node" + strconv.Itoa(i) + ".example.com"
+// 		newPodPara := &PodParameters{
+// 			spaceName:  spaceName,
+// 			podName:    slaveName,
+// 			podImage:   slaveImage,
+// 			podCommand: slaveCommand,
+// 			cpuLimit:   podCPU,
+// 			memLimit:   podMem,
+// 			podNode:    slaveNode,
+// 		}
+// 		newSlavePod, err := createHadoopPods(clientset, newPodPara)
+// 		if err != nil {
+// 			panic(err.Error())
+// 		} else {
+// 			fmt.Print("New master pod create successful")
+// 			fmt.Println(newSlavePod.Name)
+// 		}
+// 		time.Sleep(time.Duration(5) * time.Second) //create pod interval
+// 	}
+// }
