@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"strconv"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +18,10 @@ var (
 	kubeconfig = flag.String("kubeconfig", "./config", "absolute path to the kubeconfig file")
 )
 
-type podParameters struct {
+/*
+ * new struct
+ */
+type PodParameters struct {
 	spaceName  string
 	podName    string
 	podImage   string
@@ -182,21 +187,21 @@ func createHadoopMasterService(clientset *kubernetes.Clientset, spaceName string
 /*
  * create hadoop master and slave pods
  */
-func createHadoopPods(clientset *kubernetes.Clientset, podPara podParameters) (*apiv1.Pod, error) {
-	masterPriviged := true
-	masterPod := new(apiv1.Pod)
+func createHadoopPods(clientset *kubernetes.Clientset, podPara *PodParameters) (*apiv1.Pod, error) {
+	podPriviged := true
+	newPod := new(apiv1.Pod)
 	podTypeNeta := metav1.TypeMeta{Kind: "Pod", APIVersion: "V1"}
-	masterPod.TypeMeta = podTypeNeta
+	newPod.TypeMeta = podTypeNeta
 
-	podObjectMeta := metav1.ObjectMeta{Name: masterName, Namespace: spaceName, Labels: map[string]string{"name": masterName}}
-	masterPod.ObjectMeta = podObjectMeta
+	podObjectMeta := metav1.ObjectMeta{Name: podPara.podName, Namespace: podPara.spaceName, Labels: map[string]string{"name": podPara.podName}}
+	newPod.ObjectMeta = podObjectMeta
 
 	podSpec := apiv1.PodSpec{
 		Containers: []apiv1.Container{
 			apiv1.Container{
-				Name:    masterName,
-				Image:   masterImage,
-				Command: masterCommand,
+				Name:    podPara.podName,
+				Image:   podPara.podImage,
+				Command: podPara.podCommand,
 				Ports: []apiv1.ContainerPort{
 					apiv1.ContainerPort{
 						ContainerPort: 22,
@@ -277,12 +282,12 @@ func createHadoopPods(clientset *kubernetes.Clientset, podPara podParameters) (*
 				},
 				ImagePullPolicy: "IfNotPresent",
 				SecurityContext: &apiv1.SecurityContext{
-					Privileged: &masterPriviged,
+					Privileged: &podPriviged,
 				},
 				Resources: apiv1.ResourceRequirements{
 					Limits: apiv1.ResourceList{
-						apiv1.ResourceCPU:    resource.MustParse("500m"),
-						apiv1.ResourceMemory: resource.MustParse("2Gi"),
+						apiv1.ResourceCPU:    resource.MustParse(podPara.cpuLimit),
+						apiv1.ResourceMemory: resource.MustParse(podPara.memLimit),
 						// apiv1.ResourceStorage: resource.MustParse("50Gi"),
 					},
 				},
@@ -291,8 +296,8 @@ func createHadoopPods(clientset *kubernetes.Clientset, podPara podParameters) (*
 		RestartPolicy: apiv1.RestartPolicyAlways,
 		DNSPolicy:     "ClusterFirst",
 	}
-	masterPod.Spec = podSpec
-	return clientset.CoreV1().Pods(podPara.spaceName).Create(masterPod)
+	newPod.Spec = podSpec
+	return clientset.CoreV1().Pods(podPara.spaceName).Create(newPod)
 }
 
 func main() {
@@ -312,10 +317,8 @@ func main() {
 	//create namesapce
 	//newNamespace, err := createNamespace(clientset,"k8s-test")
 
-	svcName := "hadoop-master"
-	spaceName := "hadoop-test"
-
 	//get namespace
+	spaceName := "hadoop-test"
 	hadoopNc, err := getNamespace(clientset, spaceName)
 	if err != nil {
 		panic(err.Error())
@@ -323,6 +326,7 @@ func main() {
 	fmt.Println(hadoopNc.Name)
 
 	//create servie in namespace hadoopNc
+	svcName := "hadoop-master"
 	newSvc, err := createHadoopMasterService(clientset, spaceName, svcName)
 	if err != nil {
 		panic(err.Error())
@@ -335,23 +339,49 @@ func main() {
 	masterName := "hadoop-master"
 	masterImage := "172.30.7.23:5000/openshift/hadoop-master:0.1.0"
 	masterCommand := []string{"bash", "-c", "/root/start-ssh-serf.sh && sleep 365d"}
-
+	podCPU := "500m"
+	podMem := "2Gi"
+	newPodPara := &PodParameters{
+		spaceName:  spaceName,
+		podName:    masterName,
+		podImage:   masterImage,
+		podCommand: masterCommand,
+		cpuLimit:   podCPU,
+		memLimit:   podMem,
+	}
+	newMasterPod, err := createHadoopPods(clientset, newPodPara)
 	if err != nil {
 		panic(err.Error())
 	} else {
 		fmt.Print("New master pod create successful")
-		fmt.Println(newSvcPod.Name)
+		fmt.Println(newMasterPod.Name)
 	}
 
 	//create N slave pods
-	// N := 4
-	// var i int
-	// podName := "hadoop-slave-"
-	// slaveImage := "172.30.7.23:5000/openshift/hadoop-slave:0.1.0"
-	// slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST;/root/start-ssh-serf.sh ; ssh -o StrictHostKeyChecking=no $JOIN_IP \"/root/config.sh;/root/restart.sh\"; sleep 365d"}
-	// slavePriviged := true
-	// for i = 1; i <= N; i++ {
-	// 	slaveName := podName + strconv.Itoa(i)
-
-	// }
+	N := 2
+	var i int
+	podName := "hadoop-slave-"
+	slaveImage := "172.30.7.23:5000/openshift/hadoop-slave:0.1.0"
+	slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}
+	//create interval
+	time.Sleep(time.Duration(5) * time.Second)
+	for i = 1; i <= N; i++ {
+		slaveName := podName + strconv.Itoa(i)
+		newPodPara := &PodParameters{
+			spaceName:  spaceName,
+			podName:    slaveName,
+			podImage:   slaveImage,
+			podCommand: slaveCommand,
+			cpuLimit:   podCPU,
+			memLimit:   podMem,
+		}
+		newSlavePod, err := createHadoopPods(clientset, newPodPara)
+		if err != nil {
+			panic(err.Error())
+		} else {
+			fmt.Print("New master pod create successful")
+			fmt.Println(newSlavePod.Name)
+		}
+		time.Sleep(time.Duration(5) * time.Second)
+	}
 }
