@@ -4,8 +4,11 @@
 package main
 
 import (
+	"fmt"
+	"math"
 	"math/rand"
 	"strconv"
+	"time"
 )
 
 /*
@@ -22,8 +25,218 @@ const DIMENSION int = 4
 
 // Scheduler : the scheduler struct
 type Scheduler struct {
-	reTotal []float64
+	reTotal *[DIMENSION]float64
 	thold   float64
+}
+
+/*
+ * RandomSchedule : random scheduler method
+ */
+func (sch *Scheduler) RandomSchedule(podReq []PodRequest) []PodRequest {
+	//the randUsed array
+	var randUsed [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			randUsed[i][j] = 1.0
+		}
+	}
+	// schedule all the pod
+	podLen := len(podReq)
+	for i := 0; i < podLen; i++ {
+		fitInd := sch.RandomEvaluate(&randUsed, podReq[i])
+		if fitInd != -1 {
+			// add the used resource
+			podReq[i].nodeName = fitInd
+			for j := 0; j < DIMENSION; j++ {
+				randUsed[fitInd][j] = randUsed[fitInd][j] + podReq[i].resReq[j]
+			}
+
+		}
+	}
+	// calculate the cluster resource rate
+	sch.CalResourceRate(&randUsed)
+
+	// calculate the balance value
+	sch.CalClusterBalance(&randUsed, podReq)
+	return podReq
+}
+
+/*
+ * RandomEvaluate : calculate the physical machine idle resource
+ */
+func (sch *Scheduler) RandomEvaluate(randUsed *[PHYNUM][DIMENSION]float64, podReq PodRequest) int {
+	var fitInd int
+	fitInd = -1
+	// get the physical resource idle rate
+	var randIdle [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			randIdle[i][j] = (sch.reTotal[j] - randUsed[i][j] - podReq.resReq[j]) / sch.reTotal[j]
+		}
+	}
+
+	// get the satisfy physical machine index
+	saInd := sch.ResourceSatisfy(&randIdle)
+	if saInd != nil {
+		size := len(saInd)
+		rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		randInd := rd.Intn(size)
+		fitInd = saInd[randInd]
+		// fmt.Printf("%d, %d, %d\n", size, randInd, fitInd)
+	}
+
+	return fitInd
+}
+
+/*
+ * KubernetesSchedule : kubernetes default scheduler
+ */
+func (sch *Scheduler) KubernetesSchedule(podReq []PodRequest) []PodRequest {
+	//the kubUsed array
+	var kubUsed [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			kubUsed[i][j] = 1.0
+		}
+	}
+	// schedule all the pod
+	podLen := len(podReq)
+	for i := 0; i < podLen; i++ {
+		fitInd := sch.KubernetesEvaluate(&kubUsed, podReq[i])
+		if fitInd != -1 {
+			// add the used resource
+			podReq[i].nodeName = fitInd
+			for j := 0; j < DIMENSION; j++ {
+				kubUsed[fitInd][j] = kubUsed[fitInd][j] + podReq[i].resReq[j]
+			}
+
+		}
+	}
+	// calculate the cluster resource rate
+	sch.CalResourceRate(&kubUsed)
+
+	// calculate the balance value
+	sch.CalClusterBalance(&kubUsed, podReq)
+
+	return podReq
+}
+
+/*
+ * KubernetesEvaluate : calculate the physical machine idle resource and determine the desitination
+ */
+func (sch *Scheduler) KubernetesEvaluate(kubUsed *[PHYNUM][DIMENSION]float64, podReq PodRequest) int {
+	var fitInd int
+	fitInd = -1
+	// get the physical resource idle rate
+	var kubIdle [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			kubIdle[i][j] = (sch.reTotal[j] - kubUsed[i][j] - podReq.resReq[j]) / sch.reTotal[j]
+		}
+	}
+
+	// get the satisfy physical machine index
+	saInd := sch.ResourceSatisfy(&kubIdle)
+	if saInd != nil {
+		fitInd = sch.KubernetesMaxScore(&kubIdle, saInd)
+		// fmt.Printf("%d \n", fitInd)
+	}
+
+	return fitInd
+}
+
+/*
+ * KubernetesMaxScore : get the max score physical machine
+ */
+func (sch *Scheduler) KubernetesMaxScore(kubIdle *[PHYNUM][DIMENSION]float64, saInd []int) (maxInd int) {
+	saLen := len(saInd)
+	var maxScore float64
+	maxScore = -1.0
+	maxInd = saInd[0]
+	for i := 0; i < saLen; i++ {
+		scoreVal := kubIdle[saInd[i]][0]*0.5 + kubIdle[saInd[i]][1]*0.5
+		if scoreVal > maxScore {
+			maxScore = scoreVal
+			maxInd = saInd[i]
+		}
+		// fmt.Printf("%d %.3f %d \n", saInd[i], maxScore, maxInd)
+	}
+	return maxInd
+}
+
+/*
+ * MrwsSchedule : the mrws scheduler
+ */
+func (sch *Scheduler) MrwsSchedule(podReq []PodRequest) []PodRequest {
+	//the mrwsUsed array
+	var mrwsUsed [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			mrwsUsed[i][j] = 1.0
+		}
+	}
+	// schedule all the pod
+	podLen := len(podReq)
+	for i := 0; i < podLen; i++ {
+		fitInd := sch.MrwsEvaluate(&mrwsUsed, podReq[i])
+		if fitInd != -1 {
+			// add the used resource
+			podReq[i].nodeName = fitInd
+			for j := 0; j < DIMENSION; j++ {
+				mrwsUsed[fitInd][j] = mrwsUsed[fitInd][j] + podReq[i].resReq[j]
+			}
+
+		}
+	}
+	// calculate the cluster resource rate
+	sch.CalResourceRate(&mrwsUsed)
+
+	// calculate the balance value
+	sch.CalClusterBalance(&mrwsUsed, podReq)
+
+	return podReq
+}
+
+/*
+ * MrwsEvaluate : calculate the physical machine idle resource and determine the desitination
+ */
+func (sch *Scheduler) MrwsEvaluate(mrwsUsed *[PHYNUM][DIMENSION]float64, podReq PodRequest) int {
+	var fitInd int
+	fitInd = -1
+	// get the physical resource idle rate
+	var mrwsIdle [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			mrwsIdle[i][j] = (sch.reTotal[j] - mrwsUsed[i][j] - podReq.resReq[j]) / sch.reTotal[j]
+		}
+	}
+
+	// get the satisfy physical machine index
+	saInd := sch.ResourceSatisfy(&mrwsIdle)
+	if saInd != nil {
+		fitInd = sch.KubernetesMaxScore(&mrwsIdle, saInd)
+		// fmt.Printf("%d \n", fitInd)
+	}
+	return fitInd
+}
+
+/*
+ * MrwsMaxScore : get the max score physical machine
+ */
+func (sch *Scheduler) MrwsMaxScore(mrwsIdle *[PHYNUM][DIMENSION]float64, saInd []int) (maxInd int) {
+	saLen := len(saInd)
+	var maxScore float64
+	maxScore = -1.0
+	maxInd = saInd[0]
+	for i := 0; i < saLen; i++ {
+		scoreVal := mrwsIdle[saInd[i]][0]*0.5 + mrwsIdle[saInd[i]][1]*0.5
+		if scoreVal > maxScore {
+			maxScore = scoreVal
+			maxInd = saInd[i]
+		}
+		// fmt.Printf("%d %.3f %d \n", saInd[i], maxScore, maxInd)
+	}
+	return maxInd
 }
 
 /*
@@ -47,52 +260,59 @@ func (sch *Scheduler) ResourceSatisfy(phyIdle *[PHYNUM][DIMENSION]float64) []int
 }
 
 /*
- * RandomSchedule : random scheduler method
+ * CalResourceRate : calculate the physical machine resource rate just print
  */
-func (sch *Scheduler) RandomSchedule(podReq []PodRequest) []PodRequest {
-	//the randUsed array
-	var randUsed [PHYNUM][DIMENSION]float64
+func (sch *Scheduler) CalResourceRate(podUsed *[PHYNUM][DIMENSION]float64) {
 	for i := 0; i < PHYNUM; i++ {
+		fmt.Printf("%s", "node"+strconv.Itoa(i)+": ")
 		for j := 0; j < DIMENSION; j++ {
-			randUsed[i][j] = 1.0
+			fmt.Printf("%.3f ", podUsed[i][j]/sch.reTotal[j])
 		}
+		fmt.Println()
 	}
-	// schedule all the pod
-	podLen := len(podReq)
-	for i := 0; i < podLen; i++ {
-		fitInd := sch.RandomEvaluate(&randUsed, podReq[i])
-		if fitInd != -1 {
-			//
-			podReq[i].nodeName = "node" + strconv.Itoa(fitInd) + ".example.com"
-			for j := 0; j < DIMENSION; j++ {
-				randUsed[fitInd] = randUsed[fitInd] + podReq[i][j]
-			}
-		}
-	}
-	return podReq
 }
 
 /*
- * RandomEvaluate : calculate the physical machine idle resource
+ * CalClusterBalance : calculate the balance value just print
  */
-func (sch *Scheduler) RandomEvaluate(randUsed *[PHYNUM][DIMENSION]float64, podReq PodRequest) int {
-	var fitInd int
-	fitInd = -1
-	// get the physical resource idle rate
-	var randIdle [PHYNUM][DIMENSION]float64
-	for i := 0; i < PHYNUM; i++ {
-		for j := 0; j < DIMENSION; j++ {
-			randIdle[i][j] = (sch.reTotal[j] - randUsed[i][j] - podReq.resReq[j]) / sch.reTotal[j]
+func (sch *Scheduler) CalClusterBalance(podUsed *[PHYNUM][DIMENSION]float64, podReq []PodRequest) {
+	//cal the pod sum and used rate
+	podLen := len(podReq)
+	var podNum [PHYNUM]int
+	var podSum int
+	for i := 0; i < podLen; i++ {
+		if podReq[i].nodeName != -1 {
+			podSum++
+			podNum[podReq[i].nodeName]++
 		}
 	}
 
-	// get the satisfy physical machine index
-	saInd := sch.ResourceSatisfy(&randIdle)
-	if saInd != nil {
-		size := len(saInd)
-		randInd := rand.Intn(size)
-		fitInd = saInd[randInd]
-	}
+	var podIdle [PHYNUM]float64
+	var resIdle [PHYNUM][DIMENSION]float64
+	var podVal float64
+	var resVal [DIMENSION]float64 // cal the sum and mean value
 
-	return fitInd
+	for i := 0; i < PHYNUM; i++ {
+		podIdle[i] = 1.0 - (float64)(podNum[i])/(float64)(podSum)
+		podVal = podVal + podIdle[i]
+		for j := 0; j < DIMENSION; j++ {
+			resIdle[i][j] = (sch.reTotal[j] - podUsed[i][j]) / sch.reTotal[j]
+			resVal[j] = resVal[j] + resIdle[i][j]
+		}
+	}
+	// cal the balance value
+	podMean := podVal / (float64)(podSum)
+	var resMean [DIMENSION]float64
+	for j := 0; j < DIMENSION; j++ {
+		resMean[j] = resVal[j] / (float64)(PHYNUM)
+	}
+	var baIdle float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			baIdle = baIdle + math.Pow((resIdle[i][j]-resMean[j]), 2)
+		}
+		baIdle = baIdle + math.Pow((podIdle[i]-podMean), 2)
+	}
+	baIdle = math.Sqrt(baIdle)
+	fmt.Printf("The balance value is %.3f \n", baIdle)
 }
