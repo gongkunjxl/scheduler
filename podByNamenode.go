@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -27,10 +28,48 @@ type PodParameters struct {
 	podNode    string
 }
 
+// PodByName : the pod info struct
+type PodByName struct {
+	typePod  []string
+	nodeName []string
+}
+
+/*
+ * ConnectByConfig : create clienset connect client
+ */
+func (pyn *PodByName) ConnectByConfig() (*kubernetes.Clientset, error) {
+	config, err := clientcmd.BuildConfigFromFlags("https://master.example.com:8443", *kubeconfig)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	// creates the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+	return clientset, err
+}
+
+/*
+ * CreatePodByRequest : create pod by PodRequest
+ * podMod : master or slave node
+ */
+func (pyn *PodByName) CreatePodByRequest(podReq []PodRequest, podMod string) {
+	if podMod == "master" { // create master
+		podLen := len(podReq)
+		for i := 0; i < podLen; i++ {
+
+		}
+	} else { // create slave
+
+	}
+}
+
 /*
  * create hadoop-master namespace
  */
-func createNamespace(clientset *kubernetes.Clientset, spaceName string) (*apiv1.Namespace, error) {
+func (pyn *PodByName) CreateNamespace(clientset *kubernetes.Clientset, spaceName string) (*apiv1.Namespace, error) {
 	nc := new(apiv1.Namespace)
 	ncTypeMeta := metav1.TypeMeta{Kind: "NameSpace", APIVersion: "v1"}
 	nc.TypeMeta = ncTypeMeta
@@ -46,14 +85,14 @@ func createNamespace(clientset *kubernetes.Clientset, spaceName string) (*apiv1.
 /*
  * get specify namespace by name
  */
-func getNamespace(clientset *kubernetes.Clientset, spaceName string) (*apiv1.Namespace, error) {
+func (pyn *PodByName) GetNamespace(clientset *kubernetes.Clientset, spaceName string) (*apiv1.Namespace, error) {
 	return clientset.CoreV1().Namespaces().Get(spaceName, metav1.GetOptions{})
 }
 
 /*
  * create hadoop-master service
  */
-func createHadoopMasterService(clientset *kubernetes.Clientset, spaceName string, svcName string) (*apiv1.Service, error) {
+func (pyn *PodByName) CreateHadoopMasterService(clientset *kubernetes.Clientset, spaceName string, svcName string) (*apiv1.Service, error) {
 	masterSvc := new(apiv1.Service)
 	svcTypeMeta := metav1.TypeMeta{Kind: "Service", APIVersion: "V1"}
 	masterSvc.TypeMeta = svcTypeMeta
@@ -184,7 +223,7 @@ func createHadoopMasterService(clientset *kubernetes.Clientset, spaceName string
 /*
  * create hadoop master and slave pods
  */
-func createHadoopPods(clientset *kubernetes.Clientset, podPara *PodParameters) (*apiv1.Pod, error) {
+func (pyn *PodByName) CreateHadoopPods(clientset *kubernetes.Clientset, podPara *PodParameters) (*apiv1.Pod, error) {
 	podPriviged := true
 	newPod := new(apiv1.Pod)
 	podTypeNeta := metav1.TypeMeta{Kind: "Pod", APIVersion: "V1"}
@@ -297,93 +336,3 @@ func createHadoopPods(clientset *kubernetes.Clientset, podPara *PodParameters) (
 	newPod.Spec = podSpec
 	return clientset.CoreV1().Pods(podPara.spaceName).Create(newPod)
 }
-
-// func main() {
-// 	fmt.Println("come main")
-// 	flag.Parse()
-// 	// uses the current context in kubeconfig"k8s.io/apimachinery/pkg/api/resource"
-// 	config, err := clientcmd.BuildConfigFromFlags("https://master.example.com:8443", *kubeconfig)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-// 	// creates the clientset
-// 	clientset, err := kubernetes.NewForConfig(config)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-
-// 	//create namesapce
-// 	//newNamespace, err := createNamespace(clientset,"k8s-test")
-
-// 	//get namespace
-// 	spaceName := "hadoop-test"
-// 	hadoopNc, err := getNamespace(clientset, spaceName)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	}
-// 	fmt.Println(hadoopNc.Name)
-
-// 	//create servie in namespace hadoopNc
-// 	svcName := "hadoop-master"
-// 	newSvc, err := createHadoopMasterService(clientset, spaceName, svcName)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	} else {
-// 		fmt.Print(newSvc.Name)
-// 		fmt.Println("New master service create successful")
-// 	}
-
-// 	//create master pod
-// 	masterName := "hadoop-master"
-// 	masterImage := "172.30.7.23:5000/openshift/hadoop-master:0.1.0"
-// 	masterCommand := []string{"bash", "-c", "/root/start-ssh-serf.sh && sleep 365d"}
-// 	podCPU := "500m"
-// 	podMem := "2Gi"
-// 	masterNode := "master.example.com"
-// 	newPodPara := &PodParameters{
-// 		spaceName:  spaceName,
-// 		podName:    masterName,
-// 		podImage:   masterImage,
-// 		podCommand: masterCommand,
-// 		cpuLimit:   podCPU,
-// 		memLimit:   podMem,
-// 		podNode:    masterNode,
-// 	}
-// 	newMasterPod, err := createHadoopPods(clientset, newPodPara)
-// 	if err != nil {
-// 		panic(err.Error())
-// 	} else {
-// 		fmt.Print("New master pod create successful")
-// 		fmt.Println(newMasterPod.Name)
-// 	}
-
-// 	//create N slave pods
-// 	N := 2
-// 	var i int
-// 	podName := "hadoop-slave-"
-// 	slaveImage := "172.30.7.23:5000/openshift/hadoop-slave:0.1.0"
-// 	slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}
-// 	//create interval
-// 	time.Sleep(time.Duration(5) * time.Second)
-// 	for i = 1; i <= N; i++ {
-// 		slaveName := podName + strconv.Itoa(i)
-// 		slaveNode := "node" + strconv.Itoa(i) + ".example.com"
-// 		newPodPara := &PodParameters{
-// 			spaceName:  spaceName,
-// 			podName:    slaveName,
-// 			podImage:   slaveImage,
-// 			podCommand: slaveCommand,
-// 			cpuLimit:   podCPU,
-// 			memLimit:   podMem,
-// 			podNode:    slaveNode,
-// 		}
-// 		newSlavePod, err := createHadoopPods(clientset, newPodPara)
-// 		if err != nil {
-// 			panic(err.Error())
-// 		} else {
-// 			fmt.Print("New master pod create successful")
-// 			fmt.Println(newSlavePod.Name)
-// 		}
-// 		time.Sleep(time.Duration(5) * time.Second) //create pod interval
-// 	}
-// }

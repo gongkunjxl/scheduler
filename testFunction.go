@@ -24,14 +24,30 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
 	// 	fmt.Println(*podReq[i].resReq)
 	// 	fmt.Println(weight[i])
 	// }
+	fmt.Println(podLen)
 
 	// test the random scheduler function
-	// podList := sch.RandomSchedule(podReq)
-	// podList := sch.KubernetesSchedule(podReq)
-	podList := sch.MrwsSchedule(podReq, weight)
-
+	fmt.Println("The random scheduler result")
+	randList := sch.RandomSchedule(podReq)
 	for i := 0; i < podLen; i++ {
-		fmt.Printf("%d ", podList[i].nodeName)
+		fmt.Printf("%d ", randList[i].nodeName)
+	}
+	fmt.Printf("\nThe FirstFit scheduler result")
+	firstFitList := sch.FirstFitSchedule(podReq)
+	for i := 0; i < podLen; i++ {
+		fmt.Printf("%d ", firstFitList[i].nodeName)
+	}
+
+	fmt.Printf("\nThe kubernetes scheduler result")
+	kubList := sch.KubernetesSchedule(podReq)
+	for i := 0; i < podLen; i++ {
+		fmt.Printf("%d ", kubList[i].nodeName)
+	}
+
+	fmt.Printf("\nThe mrws scheduler result")
+	mrwsList := sch.MrwsSchedule(podReq, weight)
+	for i := 0; i < podLen; i++ {
+		fmt.Printf("%d ", mrwsList[i].nodeName)
 	}
 	fmt.Println()
 }
@@ -40,6 +56,7 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
  * readApplication : read the application and application matrix
  */
 func readApplication(appPath string, weightPath string) (podReq []PodRequest, weight [][DIMENSION + 1]float64) {
+
 	appFile, err := os.Open(appPath)
 	if err != nil {
 		panic(err.Error())

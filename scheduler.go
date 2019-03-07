@@ -89,6 +89,60 @@ func (sch *Scheduler) RandomEvaluate(randUsed *[PHYNUM][DIMENSION]float64, podRe
 }
 
 /*
+ * FirstFitSchedule : first fit scheduler method
+ */
+func (sch *Scheduler) FirstFitSchedule(podReq []PodRequest) []PodRequest {
+	//the randUsed array
+	var firstFitUsed [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			firstFitUsed[i][j] = 1.0
+		}
+	}
+	// schedule all the pod
+	podLen := len(podReq)
+	for i := 0; i < podLen; i++ {
+		fitInd := sch.FirstFitEvaluate(&firstFitUsed, podReq[i])
+		if fitInd != -1 {
+			// add the used resource
+			podReq[i].nodeName = fitInd
+			for j := 0; j < DIMENSION; j++ {
+				firstFitUsed[fitInd][j] = firstFitUsed[fitInd][j] + podReq[i].resReq[j]
+			}
+
+		}
+	}
+	// calculate the cluster resource rate
+	sch.CalResourceRate(&firstFitUsed)
+
+	// calculate the balance value
+	sch.CalClusterBalance(&firstFitUsed, podReq)
+	return podReq
+}
+
+/*
+ * FirstFitEvaluate : calculate the physical machine idle resource
+ */
+func (sch *Scheduler) FirstFitEvaluate(firstFitUsed *[PHYNUM][DIMENSION]float64, podReq PodRequest) int {
+	var fitInd int
+	fitInd = -1
+	// get the physical resource idle rate
+	var firstFitIdle [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			firstFitIdle[i][j] = (sch.reTotal[j] - firstFitUsed[i][j] - podReq.resReq[j]) / sch.reTotal[j]
+		}
+	}
+
+	// get the satisfy physical machine index
+	saInd := sch.ResourceSatisfy(&firstFitIdle)
+	if saInd != nil {
+		fitInd = saInd[0]
+	}
+	return fitInd
+}
+
+/*
  * KubernetesSchedule : kubernetes default scheduler
  */
 func (sch *Scheduler) KubernetesSchedule(podReq []PodRequest) []PodRequest {
@@ -189,10 +243,16 @@ func (sch *Scheduler) MrwsSchedule(podReq []PodRequest, weightPod [][DIMENSION +
 		}
 	}
 	// calculate the cluster resource rate
-	// sch.CalResourceRate(&mrwsUsed)
+	var calMrwsUsed [PHYNUM][DIMENSION]float64
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < DIMENSION; j++ {
+			calMrwsUsed[i][j] = mrwsUsed[i][j]
+		}
+	}
+	sch.CalResourceRate(&calMrwsUsed)
 
 	// calculate the balance value
-	// sch.CalClusterBalance(&mrwsUsed, podReq)
+	sch.CalClusterBalance(&calMrwsUsed, podReq)
 
 	return podReq
 }
@@ -254,7 +314,7 @@ func (sch *Scheduler) MrwsEvaluate(mrwsUsed *[PHYNUM][DIMENSION + 1]float64, pod
 			}
 			vi = vi + podIdle[i]*weightPod[DIMENSION]
 			bi = bi + (podIdle[i]/podMean)*weightPod[DIMENSION]
-			fmt.Printf("vi and bi %.3f %.3f \n", vi, bi)
+			// fmt.Printf("vi and bi %.3f %.3f \n", vi, bi)
 			// bi = 0.0
 			scoreVi := vi + bi
 			if scoreVi > maxScore {
