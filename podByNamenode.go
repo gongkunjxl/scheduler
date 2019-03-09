@@ -100,44 +100,29 @@ func (pyn *PodByName) CreatePodByRequest(podReq []PodRequest, podMod string) {
 			// podMem := "2800Mi"
 			fmt.Printf("%d %s %s %s %s %s %s %s \n", typeInd, svcName, spaceName, masterImage, masterNode, masterCommand, podCPU, podMem)
 
-			switch podReq[i].typePod {
-			case 1: // hadoop
-				{
-					// create service
-					newSvc, err := pyn.CreateHadoopMasterService(clientset, spaceName, svcName)
-					if err != nil {
-						panic(err.Error())
-					}
-					fmt.Printf("Create %s service successful \n", newSvc.Name)
-					time.Sleep(time.Duration(2) * time.Second)
-					// create master pod
-					newPodPara := &PodParameters{
-						spaceName:  spaceName,
-						podName:    masterName,
-						podImage:   masterImage,
-						podCommand: masterCommand,
-						cpuLimit:   podCPU,
-						memLimit:   podMem,
-						podNode:    masterNode,
-					}
-					newMasterPod, err := pyn.CreateHadoopPods(clientset, newPodPara)
-					if err != nil {
-						panic(err.Error())
-					}
-					fmt.Printf("Create %s master pof successful \n", newMasterPod.Name)
-				}
-			case 2: //MPI
-				{
-					fmt.Println("Create MPI master pod successful")
-				}
-			case 3: // spark
-				{
-					fmt.Println("Create spark master pod successful")
-				}
-			default:
-				fmt.Println("Error have no this type")
-
+			// create service
+			newSvc, err := pyn.CreateFrameMasterService(clientset, spaceName, svcName)
+			if err != nil {
+				panic(err.Error())
 			}
+			fmt.Printf("Create %s service successful \n", newSvc.Name)
+			time.Sleep(time.Duration(2) * time.Second)
+			// create master pod
+			newPodPara := &PodParameters{
+				spaceName:  spaceName,
+				podName:    masterName,
+				podImage:   masterImage,
+				podCommand: masterCommand,
+				cpuLimit:   podCPU,
+				memLimit:   podMem,
+				podNode:    masterNode,
+			}
+			newMasterPod, err := pyn.CreateFramePods(clientset, newPodPara)
+			if err != nil {
+				panic(err.Error())
+			}
+			fmt.Printf("Create %s master pof successful \n", newMasterPod.Name)
+
 			time.Sleep(time.Duration(5) * time.Second)
 		}
 	} else { // create slave
@@ -156,43 +141,27 @@ func (pyn *PodByName) CreatePodByRequest(podReq []PodRequest, podMod string) {
 			slaveImage := IMAGEPATH + pyn.typePod[typeInd] + "-" + podMod + ":" + IMAGEVERSION
 			slaveName := pyn.typePod[typeInd] + "-" + podMod + "-" + strconv.Itoa(i+1)
 			slaveNode := pyn.nodeName[podReq[i].nodeName]
-			slaveCommand := pyn.command
+			slaveCommand := podReq[i].command
 			podCPU := strconv.Itoa(int(podReq[i].resReq[0])) + "m"
 			podMem := strconv.Itoa(int(podReq[i].resReq[1])) + "Mi"
 			fmt.Printf("%d %s %s %s %s %s %s \n", typeInd, spaceName, slaveImage, slaveNode, slaveCommand, podCPU, podMem)
 
-			switch podReq[i].typePod {
-			case 1: // hadoop
-				{
-
-					// create master pod
-					newPodPara := &PodParameters{
-						spaceName:  spaceName,
-						podName:    slaveName,
-						podImage:   slaveImage,
-						podCommand: slaveCommand,
-						cpuLimit:   podCPU,
-						memLimit:   podMem,
-						podNode:    slaveNode,
-					}
-					newSlavePod, err := pyn.CreateHadoopPods(clientset, newPodPara)
-					if err != nil {
-						panic(err.Error())
-					}
-					fmt.Printf("Create %s slave pod successful \n", newSlavePod.Name)
-				}
-			case 2: //MPI
-				{
-					fmt.Println("Create MPI slave pod successful")
-				}
-			case 3: // spark
-				{
-					fmt.Println("Create spark slave pod successful")
-				}
-			default:
-				fmt.Println("Error have no this type")
-
+			// create slave pod
+			newPodPara := &PodParameters{
+				spaceName:  spaceName,
+				podName:    slaveName,
+				podImage:   slaveImage,
+				podCommand: slaveCommand,
+				cpuLimit:   podCPU,
+				memLimit:   podMem,
+				podNode:    slaveNode,
 			}
+			newSlavePod, err := pyn.CreateFramePods(clientset, newPodPara)
+			if err != nil {
+				panic(err.Error())
+			}
+			fmt.Printf("Create %s slave pod successful \n", newSlavePod.Name)
+
 			time.Sleep(time.Duration(5) * time.Second)
 		}
 	}
@@ -221,9 +190,9 @@ func (pyn *PodByName) GetNamespace(clientset *kubernetes.Clientset, spaceName st
 }
 
 /*
- * create hadoop-master service
+ * create XXX-master service
  */
-func (pyn *PodByName) CreateHadoopMasterService(clientset *kubernetes.Clientset, spaceName string, svcName string) (*apiv1.Service, error) {
+func (pyn *PodByName) CreateFrameMasterService(clientset *kubernetes.Clientset, spaceName string, svcName string) (*apiv1.Service, error) {
 	masterSvc := new(apiv1.Service)
 	svcTypeMeta := metav1.TypeMeta{Kind: "Service", APIVersion: "V1"}
 	masterSvc.TypeMeta = svcTypeMeta
@@ -307,7 +276,7 @@ func (pyn *PodByName) CreateHadoopMasterService(clientset *kubernetes.Clientset,
 			},
 			apiv1.ServicePort{
 				Name:       "app13",
-				Port:       8033,
+				Port:       8081,
 				TargetPort: intstr.FromInt(8033),
 				Protocol:   "TCP",
 			},
@@ -352,9 +321,9 @@ func (pyn *PodByName) CreateHadoopMasterService(clientset *kubernetes.Clientset,
 }
 
 /*
- * create hadoop master and slave pods
+ * create XXX-master and slave pods
  */
-func (pyn *PodByName) CreateHadoopPods(clientset *kubernetes.Clientset, podPara *PodParameters) (*apiv1.Pod, error) {
+func (pyn *PodByName) CreateFramePods(clientset *kubernetes.Clientset, podPara *PodParameters) (*apiv1.Pod, error) {
 	podPriviged := true
 	newPod := new(apiv1.Pod)
 	podTypeNeta := metav1.TypeMeta{Kind: "Pod", APIVersion: "V1"}
@@ -424,7 +393,7 @@ func (pyn *PodByName) CreateHadoopPods(clientset *kubernetes.Clientset, podPara 
 						Protocol:      apiv1.ProtocolTCP,
 					},
 					apiv1.ContainerPort{
-						ContainerPort: 8033,
+						ContainerPort: 8081,
 						Protocol:      apiv1.ProtocolTCP,
 					},
 					apiv1.ContainerPort{
@@ -453,7 +422,7 @@ func (pyn *PodByName) CreateHadoopPods(clientset *kubernetes.Clientset, podPara 
 					Privileged: &podPriviged,
 				},
 				Resources: apiv1.ResourceRequirements{
-					Limits: apiv1.ResourceList{
+					Requests: apiv1.ResourceList{
 						apiv1.ResourceCPU:    resource.MustParse(podPara.cpuLimit),
 						apiv1.ResourceMemory: resource.MustParse(podPara.memLimit),
 						// apiv1.ResourceStorage: resource.MustParse("50Gi"),

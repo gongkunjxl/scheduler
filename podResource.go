@@ -11,4 +11,5 @@ type PodRequest struct {
 	resReq   *[DIMENSION]float64
 	typePod  int
 	nodeName int
+	command  []string
 }

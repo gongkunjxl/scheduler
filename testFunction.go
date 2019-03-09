@@ -48,7 +48,7 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
 	fmt.Printf("Slave pod request length %d \n", len(slaveReq))
 
 	// podbyNamenode create master pod
-	var typePod = []string{"hadoop", "MPI", "spark"}
+	var typePod = []string{"hadoop", "mpi", "spark"}
 	var nodeName [PHYNUM]string
 	var typeMod string
 	typeMod = "master"
@@ -65,8 +65,8 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
 	pyn.CreatePodByRequest(masterReq, typeMod)
 
 	// podByNamenode create slave pod
-	slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}
-	pyn.command = slaveCommand
+	// slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}
+	// pyn.command = slaveCommand
 	typeMod = "slave"
 	pyn.CreatePodByRequest(slaveReq, typeMod)
 
@@ -95,6 +95,7 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
  */
 func readApplication(appPath string, weightPath string) (podReq []PodRequest, weight [][DIMENSION + 1]float64) {
 
+	var typeCommand = [][]string{{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}, {"bash", "-c", "export JOIN_IP=$MPI_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}, {"bash", "-c", "export JOIN_IP=$SPARK_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}}
 	appFile, err := os.Open(appPath)
 	if err != nil {
 		panic(err.Error())
@@ -115,9 +116,10 @@ func readApplication(appPath string, weightPath string) (podReq []PodRequest, we
 		}
 		newPod := PodRequest{
 			resReq:   &podRes,
-			typePod:  1,
+			typePod:  3,
 			nodeName: -1,
 		}
+		newPod.command = typeCommand[newPod.typePod-1]
 		podReq = append(podReq, newPod)
 	}
 	// read weight matrix file
