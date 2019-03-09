@@ -9,6 +9,6 @@ package main
  */
 type PodRequest struct {
 	resReq   *[DIMENSION]float64
-	typePod  string
+	typePod  int
 	nodeName int
 }

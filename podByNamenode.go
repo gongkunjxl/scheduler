@@ -1,7 +1,14 @@
+/*
+ * spaceName : create hadoop-project and other-project in cluster
+ */
+
 package main
 
 import (
 	"flag"
+	"fmt"
+	"strconv"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,6 +21,12 @@ import (
 var (
 	kubeconfig = flag.String("kubeconfig", "./config", "absolute path to the kubeconfig file")
 )
+
+// IMAGEPATH : container image path
+const IMAGEPATH string = "172.30.7.23:5000/openshift/"
+
+// IMAGEVERSION : container image version
+const IMAGEVERSION string = "0.1.0"
 
 /*
  * new struct podNode the pod schedule the nodeName
@@ -28,10 +41,16 @@ type PodParameters struct {
 	podNode    string
 }
 
-// PodByName : the pod info struct
+/*
+ * PodByName : the pod info struct
+ * typePod : {"hadoop", "MPI", "spark"}
+ * nodeName : {"master.example.com", "node1.example.com", .....}
+ * command : {"bash", "-c", "/root/start-ssh-serf.sh && sleep 365d"}
+ */
 type PodByName struct {
 	typePod  []string
-	nodeName []string
+	nodeName [PHYNUM]string
+	command  []string
 }
 
 /*
@@ -54,15 +73,128 @@ func (pyn *PodByName) ConnectByConfig() (*kubernetes.Clientset, error) {
 /*
  * CreatePodByRequest : create pod by PodRequest
  * podMod : master or slave node
+ * each calculate framework only one master pod
  */
 func (pyn *PodByName) CreatePodByRequest(podReq []PodRequest, podMod string) {
+
 	if podMod == "master" { // create master
 		podLen := len(podReq)
 		for i := 0; i < podLen; i++ {
+			if podReq[i].nodeName == -1 { // the pod is not satisfied
+				continue
+			}
+			clientset, err := pyn.ConnectByConfig()
+			if err != nil {
+				panic(err.Error())
+			}
+			typeInd := podReq[i].typePod - 1 // from zero index
+			svcName := pyn.typePod[typeInd] + "-" + podMod
+			spaceName := pyn.typePod[typeInd] + "-project"
+			masterImage := IMAGEPATH + pyn.typePod[typeInd] + "-" + podMod + ":" + IMAGEVERSION
+			masterName := pyn.typePod[typeInd] + "-" + podMod
+			masterNode := pyn.nodeName[podReq[i].nodeName]
+			masterCommand := pyn.command
+			podCPU := strconv.Itoa(int(podReq[i].resReq[0])) + "m"
+			podMem := strconv.Itoa(int(podReq[i].resReq[1])) + "Mi"
+			// podCPU := "1044m"
+			// podMem := "2800Mi"
+			fmt.Printf("%d %s %s %s %s %s %s %s \n", typeInd, svcName, spaceName, masterImage, masterNode, masterCommand, podCPU, podMem)
 
+			switch podReq[i].typePod {
+			case 1: // hadoop
+				{
+					// create service
+					newSvc, err := pyn.CreateHadoopMasterService(clientset, spaceName, svcName)
+					if err != nil {
+						panic(err.Error())
+					}
+					fmt.Printf("Create %s service successful \n", newSvc.Name)
+					time.Sleep(time.Duration(2) * time.Second)
+					// create master pod
+					newPodPara := &PodParameters{
+						spaceName:  spaceName,
+						podName:    masterName,
+						podImage:   masterImage,
+						podCommand: masterCommand,
+						cpuLimit:   podCPU,
+						memLimit:   podMem,
+						podNode:    masterNode,
+					}
+					newMasterPod, err := pyn.CreateHadoopPods(clientset, newPodPara)
+					if err != nil {
+						panic(err.Error())
+					}
+					fmt.Printf("Create %s master pof successful \n", newMasterPod.Name)
+				}
+			case 2: //MPI
+				{
+					fmt.Println("Create MPI master pod successful")
+				}
+			case 3: // spark
+				{
+					fmt.Println("Create spark master pod successful")
+				}
+			default:
+				fmt.Println("Error have no this type")
+
+			}
+			time.Sleep(time.Duration(5) * time.Second)
 		}
 	} else { // create slave
+		podLen := len(podReq)
+		for i := 0; i < podLen; i++ {
+			if podReq[i].nodeName == -1 { // the pod is not satisfied
+				continue
+			}
+			clientset, err := pyn.ConnectByConfig()
+			if err != nil {
+				panic(err.Error())
+			}
 
+			typeInd := podReq[i].typePod - 1 // from zero index
+			spaceName := pyn.typePod[typeInd] + "-project"
+			slaveImage := IMAGEPATH + pyn.typePod[typeInd] + "-" + podMod + ":" + IMAGEVERSION
+			slaveName := pyn.typePod[typeInd] + "-" + podMod + "-" + strconv.Itoa(i+1)
+			slaveNode := pyn.nodeName[podReq[i].nodeName]
+			slaveCommand := pyn.command
+			podCPU := strconv.Itoa(int(podReq[i].resReq[0])) + "m"
+			podMem := strconv.Itoa(int(podReq[i].resReq[1])) + "Mi"
+			fmt.Printf("%d %s %s %s %s %s %s \n", typeInd, spaceName, slaveImage, slaveNode, slaveCommand, podCPU, podMem)
+
+			switch podReq[i].typePod {
+			case 1: // hadoop
+				{
+
+					// create master pod
+					newPodPara := &PodParameters{
+						spaceName:  spaceName,
+						podName:    slaveName,
+						podImage:   slaveImage,
+						podCommand: slaveCommand,
+						cpuLimit:   podCPU,
+						memLimit:   podMem,
+						podNode:    slaveNode,
+					}
+					newSlavePod, err := pyn.CreateHadoopPods(clientset, newPodPara)
+					if err != nil {
+						panic(err.Error())
+					}
+					fmt.Printf("Create %s slave pod successful \n", newSlavePod.Name)
+				}
+			case 2: //MPI
+				{
+					fmt.Println("Create MPI slave pod successful")
+				}
+			case 3: // spark
+				{
+					fmt.Println("Create spark slave pod successful")
+				}
+			default:
+				fmt.Println("Error have no this type")
+
+			}
+			time.Sleep(time.Duration(5) * time.Second)
+		}
 	}
 }
 
@@ -77,7 +209,6 @@ func (pyn *PodByName) CreateNamespace(clientset *kubernetes.Clientset, spaceName
 	nc.ObjectMeta = metav1.ObjectMeta{
 		Name: spaceName,
 	}
-
 	nc.Spec = apiv1.NamespaceSpec{}
 	return clientset.CoreV1().Namespaces().Create(nc)
 }

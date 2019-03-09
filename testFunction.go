@@ -18,7 +18,7 @@ import (
 func testScheduler(sch *Scheduler, appPath string, weightPath string) {
 
 	fmt.Println("test scheduler functions")
-	podReq, weight := readApplication(appPath, weightPath)
+	podReq, _ := readApplication(appPath, weightPath)
 	podLen := len(podReq)
 	// for i := 0; i < appLen; i++ {
 	// 	fmt.Println(*podReq[i].resReq)
@@ -32,24 +32,62 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
 	for i := 0; i < podLen; i++ {
 		fmt.Printf("%d ", randList[i].nodeName)
 	}
-	fmt.Printf("\nThe FirstFit scheduler result")
-	firstFitList := sch.FirstFitSchedule(podReq)
-	for i := 0; i < podLen; i++ {
-		fmt.Printf("%d ", firstFitList[i].nodeName)
-	}
-
-	fmt.Printf("\nThe kubernetes scheduler result")
-	kubList := sch.KubernetesSchedule(podReq)
-	for i := 0; i < podLen; i++ {
-		fmt.Printf("%d ", kubList[i].nodeName)
-	}
-
-	fmt.Printf("\nThe mrws scheduler result")
-	mrwsList := sch.MrwsSchedule(podReq, weight)
-	for i := 0; i < podLen; i++ {
-		fmt.Printf("%d ", mrwsList[i].nodeName)
-	}
 	fmt.Println()
+	spec := -1 // specify master or slave podReq
+	var masterReq []PodRequest
+	var slaveReq []PodRequest
+	for i := 0; i < podLen; i++ {
+		if randList[i].typePod != spec {
+			masterReq = append(masterReq, randList[i])
+			spec = randList[i].typePod
+		} else {
+			slaveReq = append(slaveReq, randList[i])
+		}
+	}
+	fmt.Printf("Master pod request length %d \n", len(masterReq))
+	fmt.Printf("Slave pod request length %d \n", len(slaveReq))
+
+	// podbyNamenode create master pod
+	var typePod = []string{"hadoop", "MPI", "spark"}
+	var nodeName [PHYNUM]string
+	var typeMod string
+	typeMod = "master"
+	nodeName[0] = "master.example.com"
+	for i := 1; i < PHYNUM; i++ {
+		nodeName[i] = "node" + strconv.Itoa(i) + ".example.com"
+	}
+	masterCommand := []string{"bash", "-c", "/root/start-ssh-serf.sh && sleep 365d"}
+	pyn := PodByName{
+		typePod:  typePod,
+		nodeName: nodeName,
+		command:  masterCommand,
+	}
+	pyn.CreatePodByRequest(masterReq, typeMod)
+
+	// podByNamenode create slave pod
+	slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}
+	pyn.command = slaveCommand
+	typeMod = "slave"
+	pyn.CreatePodByRequest(slaveReq, typeMod)
+
+	// fmt.Printf("\nThe FirstFit scheduler result")
+	// firstFitList := sch.FirstFitSchedule(podReq)
+	// for i := 0; i < podLen; i++ {
+	// 	fmt.Printf("%d ", firstFitList[i].nodeName)
+	// }
+
+	// fmt.Printf("\nThe kubernetes scheduler result")
+	// kubList := sch.KubernetesSchedule(podReq)
+	// for i := 0; i < podLen; i++ {
+	// 	fmt.Printf("%d ", kubList[i].nodeName)
+	// }
+
+	// fmt.Printf("\nThe mrws scheduler result")
+	// mrwsList := sch.MrwsSchedule(podReq, weight)
+	// for i := 0; i < podLen; i++ {
+	// 	fmt.Printf("%d ", mrwsList[i].nodeName)
+	// }
+	// fmt.Println()
 }
 
 /*
@@ -77,7 +115,7 @@ func readApplication(appPath string, weightPath string) (podReq []PodRequest, we
 		}
 		newPod := PodRequest{
 			resReq:   &podRes,
-			typePod:  "hadoop",
+			typePod:  1,
 			nodeName: -1,
 		}
 		podReq = append(podReq, newPod)
