@@ -16,7 +16,6 @@ import (
  * testScheduler : test random scheduler function
  */
 func testScheduler(sch *Scheduler, appPath string, weightPath string) {
-
 	fmt.Println("test scheduler functions")
 	podReq, _ := readApplication(appPath, weightPath)
 	podLen := len(podReq)
@@ -28,27 +27,37 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
 
 	// test the random scheduler function
 	fmt.Println("The random scheduler result")
-	randList := sch.RandomSchedule(podReq)
+	// podList := sch.RandomSchedule(podReq)
+	podList := sch.KubernetesSchedule(podReq)
+	// podList := sch.MrwsSchedule(podReq, weight)
+
 	for i := 0; i < podLen; i++ {
-		fmt.Printf("%d ", randList[i].nodeName)
+		fmt.Printf("%d ", podList[i].nodeName)
 	}
 	fmt.Println()
-	spec := -1 // specify master or slave podReq
+	var spec = [3]int{-1, -1, -1} // specify master or slave podReq
 	var masterReq []PodRequest
 	var slaveReq []PodRequest
 	for i := 0; i < podLen; i++ {
-		if randList[i].typePod != spec {
-			masterReq = append(masterReq, randList[i])
-			spec = randList[i].typePod
+		var j int
+		j = 0
+		for j = 0; j < 3; j++ {
+			if podList[i].typePod == spec[j] {
+				break
+			}
+		}
+		if j == 3 {
+			masterReq = append(masterReq, podList[i])
+			spec[podList[i].typePod-1] = podList[i].typePod
 		} else {
-			slaveReq = append(slaveReq, randList[i])
+			slaveReq = append(slaveReq, podList[i])
 		}
 	}
 	fmt.Printf("Master pod request length %d \n", len(masterReq))
 	fmt.Printf("Slave pod request length %d \n", len(slaveReq))
 
 	// podbyNamenode create master pod
-	var typePod = []string{"hadoop", "mpi", "spark"}
+	var typePod = []string{"mpi", "spark", "hadoop"}
 	var nodeName [PHYNUM]string
 	var typeMod string
 	typeMod = "master"
@@ -65,29 +74,9 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
 	pyn.CreatePodByRequest(masterReq, typeMod)
 
 	// podByNamenode create slave pod
-	// slaveCommand := []string{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}
-	// pyn.command = slaveCommand
 	typeMod = "slave"
 	pyn.CreatePodByRequest(slaveReq, typeMod)
 
-	// fmt.Printf("\nThe FirstFit scheduler result")
-	// firstFitList := sch.FirstFitSchedule(podReq)
-	// for i := 0; i < podLen; i++ {
-	// 	fmt.Printf("%d ", firstFitList[i].nodeName)
-	// }
-
-	// fmt.Printf("\nThe kubernetes scheduler result")
-	// kubList := sch.KubernetesSchedule(podReq)
-	// for i := 0; i < podLen; i++ {
-	// 	fmt.Printf("%d ", kubList[i].nodeName)
-	// }
-
-	// fmt.Printf("\nThe mrws scheduler result")
-	// mrwsList := sch.MrwsSchedule(podReq, weight)
-	// for i := 0; i < podLen; i++ {
-	// 	fmt.Printf("%d ", mrwsList[i].nodeName)
-	// }
-	// fmt.Println()
 }
 
 /*
@@ -95,7 +84,7 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
  */
 func readApplication(appPath string, weightPath string) (podReq []PodRequest, weight [][DIMENSION + 1]float64) {
 
-	var typeCommand = [][]string{{"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}, {"bash", "-c", "export JOIN_IP=$MPI_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}, {"bash", "-c", "export JOIN_IP=$SPARK_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}}
+	var typeCommand = [][]string{{"bash", "-c", "export JOIN_IP=$MPI_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}, {"bash", "-c", "export JOIN_IP=$SPARK_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}, {"bash", "-c", "export JOIN_IP=$HADOOP_MASTER_SERVICE_HOST && /root/start-ssh-serf.sh && sleep 365d"}}
 	appFile, err := os.Open(appPath)
 	if err != nil {
 		panic(err.Error())
@@ -110,13 +99,15 @@ func readApplication(appPath string, weightPath string) (podReq []PodRequest, we
 		}
 		var podRes [DIMENSION]float64
 		str := strings.Split(line, " ")
-		strLen := len(str)
+		strLen := len(str) - 1
 		for i := 0; i < strLen; i++ {
 			podRes[i], _ = strconv.ParseFloat(str[i], 64)
 		}
+		podType, _ := strconv.Atoi(str[strLen])
+		// podType = 1
 		newPod := PodRequest{
 			resReq:   &podRes,
-			typePod:  3,
+			typePod:  podType,
 			nodeName: -1,
 		}
 		newPod.command = typeCommand[newPod.typePod-1]
@@ -154,9 +145,9 @@ func main() {
 	appPath = "application.txt"
 	weightPah = "weight.txt"
 
-	var reTotal = [DIMENSION]float64{2400.0, 16000.0, 1000.0, 1000.0}
+	var reTotal = [DIMENSION]float64{4000.0, 16000.0, 1000.0, 100.0}
 	var thold float64
-	thold = 0.1
+	thold = 0.15
 	sch := &Scheduler{
 		reTotal: &reTotal,
 		thold:   thold,

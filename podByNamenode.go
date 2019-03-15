@@ -93,12 +93,14 @@ func (pyn *PodByName) CreatePodByRequest(podReq []PodRequest, podMod string) {
 			masterImage := IMAGEPATH + pyn.typePod[typeInd] + "-" + podMod + ":" + IMAGEVERSION
 			masterName := pyn.typePod[typeInd] + "-" + podMod
 			masterNode := pyn.nodeName[podReq[i].nodeName]
+			// var masterNode string
+			// masterNode = "node2.example.com"
 			masterCommand := pyn.command
 			podCPU := strconv.Itoa(int(podReq[i].resReq[0])) + "m"
 			podMem := strconv.Itoa(int(podReq[i].resReq[1])) + "Mi"
 			// podCPU := "1044m"
 			// podMem := "2800Mi"
-			fmt.Printf("%d %s %s %s %s %s %s %s \n", typeInd, svcName, spaceName, masterImage, masterNode, masterCommand, podCPU, podMem)
+			fmt.Printf("%d %s %s \n", typeInd, svcName, masterNode)
 
 			// create service
 			newSvc, err := pyn.CreateFrameMasterService(clientset, spaceName, svcName)
@@ -121,7 +123,7 @@ func (pyn *PodByName) CreatePodByRequest(podReq []PodRequest, podMod string) {
 			if err != nil {
 				panic(err.Error())
 			}
-			fmt.Printf("Create %s master pof successful \n", newMasterPod.Name)
+			fmt.Printf("Create %s successful \n", newMasterPod.Name)
 
 			time.Sleep(time.Duration(5) * time.Second)
 		}
@@ -144,7 +146,7 @@ func (pyn *PodByName) CreatePodByRequest(podReq []PodRequest, podMod string) {
 			slaveCommand := podReq[i].command
 			podCPU := strconv.Itoa(int(podReq[i].resReq[0])) + "m"
 			podMem := strconv.Itoa(int(podReq[i].resReq[1])) + "Mi"
-			fmt.Printf("%d %s %s %s %s %s %s \n", typeInd, spaceName, slaveImage, slaveNode, slaveCommand, podCPU, podMem)
+			fmt.Printf("%d %s %s \n", typeInd, slaveName, slaveNode)
 
 			// create slave pod
 			newPodPara := &PodParameters{
@@ -160,7 +162,7 @@ func (pyn *PodByName) CreatePodByRequest(podReq []PodRequest, podMod string) {
 			if err != nil {
 				panic(err.Error())
 			}
-			fmt.Printf("Create %s slave pod successful \n", newSlavePod.Name)
+			fmt.Printf("Create %s successful \n", newSlavePod.Name)
 
 			time.Sleep(time.Duration(5) * time.Second)
 		}
