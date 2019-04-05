@@ -19,22 +19,32 @@ func testScheduler(sch *Scheduler, appPath string, weightPath string) {
 	fmt.Println("test scheduler functions")
 	podReq, _ := readApplication(appPath, weightPath)
 	podLen := len(podReq)
-	// for i := 0; i < appLen; i++ {
+	// for i := 0; i < podLen; i++ {
 	// 	fmt.Println(*podReq[i].resReq)
 	// 	fmt.Println(weight[i])
 	// }
 	fmt.Println(podLen)
 
 	// test the random scheduler function
-	fmt.Println("The random scheduler result")
+	fmt.Println("The Random scheduler result")
 	// podList := sch.RandomSchedule(podReq)
-	podList := sch.KubernetesSchedule(podReq)
+	// podList := sch.KubernetesSchedule(podReq)
 	// podList := sch.MrwsSchedule(podReq, weight)
+	podList := sch.FirstFitSchedule(podReq)
 
+	var countPod [PHYNUM][3]int
 	for i := 0; i < podLen; i++ {
 		fmt.Printf("%d ", podList[i].nodeName)
+		countPod[podList[i].nodeName][podList[i].typePod-1]++
 	}
 	fmt.Println()
+	for i := 0; i < PHYNUM; i++ {
+		for j := 0; j < 3; j++ {
+			fmt.Printf("%d ", countPod[i][j])
+		}
+		fmt.Println()
+	}
+
 	var spec = [3]int{-1, -1, -1} // specify master or slave podReq
 	var masterReq []PodRequest
 	var slaveReq []PodRequest
@@ -147,7 +157,7 @@ func main() {
 
 	var reTotal = [DIMENSION]float64{4000.0, 16000.0, 1000.0, 100.0}
 	var thold float64
-	thold = 0.15
+	thold = 0.25
 	sch := &Scheduler{
 		reTotal: &reTotal,
 		thold:   thold,

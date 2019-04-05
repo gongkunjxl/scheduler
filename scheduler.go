@@ -208,7 +208,7 @@ func (sch *Scheduler) KubernetesMaxScore(kubIdle *[PHYNUM][DIMENSION]float64, sa
 	maxScore = -1.0
 	maxInd = saInd[0]
 	for i := 0; i < saLen; i++ {
-		scoreVal := kubIdle[saInd[i]][0]*0.5 + kubIdle[saInd[i]][1]*0.5
+		scoreVal := kubIdle[saInd[i]][0]*0.5 + kubIdle[saInd[i]][1]*0.5 + 1.0 - math.Abs(kubIdle[saInd[i]][0]-kubIdle[saInd[i]][1])
 		if scoreVal > maxScore {
 			maxScore = scoreVal
 			maxInd = saInd[i]
